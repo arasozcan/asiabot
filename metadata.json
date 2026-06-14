@@ -1,0 +1,6 @@
+{
+  "name": "Ses, Işık ve DJ Yönetim Paneli",
+  "description": "Ses, ışık, DJ kiralama ve hizmet yönetim paneli. Etkinlik takvimi, ekipman, eleman eşleştirme ve gider yönetimi içerir.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

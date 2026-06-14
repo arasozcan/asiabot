@@ -1,0 +1,83 @@
+{
+  "entities": {
+    "Staff": {
+      "title": "Staff Member",
+      "description": "A member of the personnel squad of Asia Sound & Light Technology",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Full name of the staff member" },
+        "role": { "type": "string", "description": "Specific functional task / role" },
+        "phone": { "type": "string", "description": "Contact phone number" },
+        "status": { "type": "string", "description": "Operational work status of staff member" }
+      },
+      "required": ["name", "role", "status"]
+    },
+    "EventJob": {
+      "title": "Event Job",
+      "description": "A scheduled operation / gig run by Asia Sound & Light Technology",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Title or display name of the event" },
+        "date": { "type": "string", "format": "date", "description": "Calendar date mapping" },
+        "time": { "type": "string", "description": "Daily start time" },
+        "location": { "type": "string", "description": "Venue address or location description" },
+        "staff": { "type": "array", "description": "List of staff names assigned" },
+        "materials": { "type": "array", "description": "Selected equipment or material text items" },
+        "djService": { "type": "boolean", "description": "Is a DJ package requested" },
+        "notes": { "type": "string", "description": "Internal technical coordinator notes" },
+        "status": { "type": "string", "description": "Milestone status of the gig" },
+        "clientName": { "type": "string", "description": "Client main contact name" },
+        "clientPhone": { "type": "string", "description": "Client contact phone" },
+        "budget": { "type": "number", "description": "Calculated total income / budget in TRY" },
+        "eventType": { "type": "string", "description": "Categorized type of the event" }
+      },
+      "required": ["title", "date", "time", "location", "staff", "materials", "djService", "status", "eventType"]
+    },
+    "Expense": {
+      "title": "Expense Voucher",
+      "description": "An operational financial expense tied to a specific gig or general administration",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Description of the voucher purchase" },
+        "eventId": { "type": "string", "description": "Underlying associated event or job ID" },
+        "person": { "type": "string", "description": "Staff member submitting or receiving the expense" },
+        "amount": { "type": "number", "description": "Raw financial spent in TRY" },
+        "date": { "type": "string", "format": "date", "description": "Accrued calendar date" },
+        "category": { "type": "string", "description": "Accrued operating budget ledger" },
+        "notes": { "type": "string", "description": "Detailed notes on spent" }
+      },
+      "required": ["title", "eventId", "person", "amount", "date", "category"]
+    },
+    "Reminder": {
+      "title": "Event Reminder",
+      "description": "An automated or custom event reminder notice",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Content of the reminder notification" },
+        "eventId": { "type": "string", "description": "The associated event ID" },
+        "date": { "type": "string", "format": "date", "description": "Date of reminder YYYY-MM-DD" },
+        "time": { "type": "string", "description": "Time of reminder HH:MM" },
+        "isCompleted": { "type": "boolean", "description": "Has this alert been marked as completed/read" }
+      },
+      "required": ["title", "eventId", "date", "isCompleted"]
+    }
+  },
+  "firestore": {
+    "/staff/{staffId}": {
+      "schema": "Staff",
+      "description": "Collection of available technical staff personnel"
+    },
+    "/events/{eventId}": {
+      "schema": "EventJob",
+      "description": "Gig schedule events"
+    },
+    "/expenses/{expenseId}": {
+      "schema": "Expense",
+      "description": "Event-related and general expense entries"
+    },
+    "/reminders/{reminderId}": {
+      "schema": "Reminder",
+      "description": "Event reminders and alarms"
+    }
+  }
+}
