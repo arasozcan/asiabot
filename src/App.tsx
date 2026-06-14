@@ -68,11 +68,11 @@ export default function App() {
   };
 
   const [events, setEvents] = useState<EventJob[]>(() => 
-    getStoredData('rf_events_data', INITIAL_EVENTS)
+    getStoredData('rf_events_data', INITIAL_EVENTS).filter((e: any) => !['v1', 'v2', 'v3', 'v4', 'v5'].includes(e.id))
   );
   
   const [expenses, setExpenses] = useState<Expense[]>(() => 
-    getStoredData('rf_expenses_data', INITIAL_EXPENSES)
+    getStoredData('rf_expenses_data', INITIAL_EXPENSES).filter((e: any) => !['ex1', 'ex2', 'ex3', 'ex4', 'ex5', 'ex6', 'ex7'].includes(e.id))
   );
   
   const [staffList, setStaffList] = useState<Staff[]>(() => 
@@ -82,7 +82,7 @@ export default function App() {
   const INITIAL_REMINDERS: Reminder[] = [];
 
   const [reminders, setReminders] = useState<Reminder[]>(() =>
-    getStoredData('rf_reminders_data', INITIAL_REMINDERS)
+    getStoredData('rf_reminders_data', INITIAL_REMINDERS).filter((r: any) => !['rem-1', 'rem-2', 'rem-3'].includes(r.id))
   );
 
   const [dbMode, setDbMode] = useState<'cloud' | 'local'>('local');
@@ -126,7 +126,13 @@ export default function App() {
           } else {
             const list: EventJob[] = [];
             snapshot.forEach((snap) => {
-              list.push({ ...snap.data(), id: snap.id } as EventJob);
+              const id = snap.id;
+              if (['v1', 'v2', 'v3', 'v4', 'v5'].includes(id)) {
+                // Wipe stale mock events from Firestore
+                deleteDoc(doc(db, 'events', id)).catch(e => console.warn(e));
+              } else {
+                list.push({ ...snap.data(), id } as EventJob);
+              }
             });
             // Sort by date then time
             list.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
@@ -178,7 +184,13 @@ export default function App() {
           } else {
             const list: Expense[] = [];
             snapshot.forEach((snap) => {
-              list.push({ ...snap.data(), id: snap.id } as Expense);
+              const id = snap.id;
+              if (['ex1', 'ex2', 'ex3', 'ex4', 'ex5', 'ex6', 'ex7'].includes(id)) {
+                // Wipe stale mock expenses from Firestore
+                deleteDoc(doc(db, 'expenses', id)).catch(e => console.warn(e));
+              } else {
+                list.push({ ...snap.data(), id } as Expense);
+              }
             });
             setExpenses(list);
             localStorage.setItem('rf_expenses_data', JSON.stringify(list));
@@ -203,7 +215,13 @@ export default function App() {
           } else {
             const list: Reminder[] = [];
             snapshot.forEach((snap) => {
-              list.push({ ...snap.data(), id: snap.id } as Reminder);
+              const id = snap.id;
+              if (['rem-1', 'rem-2', 'rem-3'].includes(id)) {
+                // Wipe stale mock reminders from Firestore
+                deleteDoc(doc(db, 'reminders', id)).catch(e => console.warn(e));
+              } else {
+                list.push({ ...snap.data(), id } as Reminder);
+              }
             });
             setReminders(list);
             localStorage.setItem('rf_reminders_data', JSON.stringify(list));
