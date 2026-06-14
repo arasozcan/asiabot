@@ -79,11 +79,7 @@ export default function App() {
     getStoredData('rf_staff_data', INITIAL_STAFF)
   );
 
-  const INITIAL_REMINDERS: Reminder[] = [
-    { id: 'rem-1', title: 'Mandarin Oriental kurulum saatini (14:00) otel yönetimi ile teyit et', eventId: 'v1', date: '2026-06-14', time: '15:00', isCompleted: false },
-    { id: 'rem-2', title: 'TechCorp A.Ş. Sahne arkası LED ekran montajı için ek truss parça sayısını planla', eventId: 'v2', date: '2026-06-17', time: '11:00', isCompleted: false },
-    { id: 'rem-3', title: 'Bahar Şenliği Konseri için ODTÜ Mezunlar Derneği elektrik altyapısını kontrol et', eventId: 'v4', date: '2026-06-14', time: '12:00', isCompleted: true },
-  ];
+  const INITIAL_REMINDERS: Reminder[] = [];
 
   const [reminders, setReminders] = useState<Reminder[]>(() =>
     getStoredData('rf_reminders_data', INITIAL_REMINDERS)
@@ -387,6 +383,59 @@ export default function App() {
     }
   };
 
+  // --- MASTER CLEANUP / ALL DATA PURGE ACTION ---
+  const handleClearAllData = async () => {
+    if (!window.confirm("DİKKAT! Tüm etkinlikleri, personel kadrosunu, harcamaları ve hatırlatıcıları silmek istediğinizden emin misiniz? Bu işlem bulut ve yerel veritabanındaki TÜM kayıtları silecektir ve geri alınamaz.")) {
+      return;
+    }
+
+    // Capture frozen copies of active entities
+    const currentEvents = [...events];
+    const currentStaff = [...staffList];
+    const currentExpenses = [...expenses];
+    const currentReminders = [...reminders];
+
+    // Clear UI state immediately (optimistic UI)
+    setEvents([]);
+    setStaffList([]);
+    setExpenses([]);
+    setReminders([]);
+
+    // Purge Local Storage
+    localStorage.removeItem('rf_events_data');
+    localStorage.removeItem('rf_expenses_data');
+    localStorage.removeItem('rf_staff_data');
+    localStorage.removeItem('rf_reminders_data');
+
+    // Purge Cloud Database if connected
+    if (dbMode === 'cloud') {
+      try {
+        const deletePromises: Promise<void>[] = [];
+
+        currentEvents.forEach((ev) => {
+          deletePromises.push(deleteDoc(doc(db, 'events', ev.id)));
+        });
+        currentStaff.forEach((st) => {
+          deletePromises.push(deleteDoc(doc(db, 'staff', st.id)));
+        });
+        currentExpenses.forEach((ex) => {
+          deletePromises.push(deleteDoc(doc(db, 'expenses', ex.id)));
+        });
+        currentReminders.forEach((rem) => {
+          deletePromises.push(deleteDoc(doc(db, 'reminders', rem.id)));
+        });
+
+        await Promise.all(deletePromises);
+        alert("Tüm bulut ve yerel veritabanı kayıtları başarıyla sıfırlandı!");
+      } catch (err: any) {
+        console.warn("Could not completely purge Firestore documents:", err);
+        alert(`Yerel veriler temizlendi fakat bazı bulut kayıtları silinirken hata oluştu: ${err.message}`);
+      }
+    } else {
+      alert("Tüm yerel veritabanı kayıtları başarıyla temizlendi!");
+    }
+  };
+
 
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -553,6 +602,16 @@ export default function App() {
           {/* Quick status bar indicator with Google sign-in */}
           <div className="flex items-center gap-3">
             
+            {/* Clear All Data Reset Button */}
+            <button
+              onClick={handleClearAllData}
+              className="p-1 px-2.5 text-[10px] uppercase font-bold text-rose-450 hover:text-white bg-rose-950/20 hover:bg-rose-600 border border-rose-900/40 hover:border-rose-500 rounded-xl transition-all flex items-center gap-1.5 h-9"
+              title="Tüm Veritabanı ve Yerel Verileri Tamamen Temizle"
+            >
+              <Trash className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Verileri Sıfırla</span>
+            </button>
+
             {/* Notification Bell Badge */}
             <button
               onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
