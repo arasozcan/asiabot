@@ -24,7 +24,10 @@ import {
   Plus,
   X,
   Volume1,
-  VolumeX
+  VolumeX,
+  Smartphone,
+  Share2,
+  Sparkles
 } from 'lucide-react';
 
 import { EventJob, Expense, Staff, Equipment, Reminder } from './types';
@@ -222,6 +225,47 @@ export default function App() {
     setLoginName('');
     setLoginCode('');
     setLoginError('');
+  };
+
+  // --- PROGRESSIVE WEB APP (PWA) SHORTCUT & INSTALL ENGINE ---
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showPwaGuide, setShowPwaGuide] = useState(false);
+  const [isAppInstalled, setIsAppInstalled] = useState(false);
+
+  useEffect(() => {
+    const handleBeforePrompt = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforePrompt);
+
+    const handleInstalled = () => {
+      setIsAppInstalled(true);
+      setDeferredPrompt(null);
+    };
+
+    window.addEventListener('appinstalled', handleInstalled);
+
+    if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone) {
+      setIsAppInstalled(true);
+    }
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforePrompt);
+      window.removeEventListener('appinstalled', handleInstalled);
+    };
+  }, []);
+
+  const triggerPwaInstall = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      console.log(`User installation choice outcome: ${outcome}`);
+      setDeferredPrompt(null);
+    } else {
+      setShowPwaGuide(true);
+    }
   };
 
   // Active View Tab Control
@@ -791,6 +835,21 @@ export default function App() {
             </div>
           </form>
 
+          {/* Custom Install block inside login panel */}
+          <div className="pt-4 border-t border-slate-800/60 flex flex-col items-center">
+            <button
+              type="button"
+              onClick={triggerPwaInstall}
+              className="w-full py-2.5 px-4 bg-gradient-to-r from-blue-950/40 to-slate-900/40 hover:from-slate-900/60 hover:to-slate-850/60 border border-slate-800 text-teal-400 hover:text-teal-300 rounded-xl font-bold text-[11px] uppercase tracking-wider flex items-center justify-center gap-2 hover:scale-[1.01] transition-all"
+            >
+              <Smartphone className="w-3.5 h-3.5 text-teal-400" />
+              Telefona Kısayol Oluştur (Yükle)
+            </button>
+            <p className="text-[9px] text-slate-500 text-center mt-2 leading-relaxed">
+              * Bu sayede uygulamayı telefonunuzun ana ekranından tek tıklama ile tıpkı bir uygulama gibi açabilirsiniz.
+            </p>
+          </div>
+
           {/* Slogan */}
           <p className="text-[10px] text-slate-500 text-center font-mono font-medium pt-3 border-t border-slate-800/50">
             &copy; 2026 Asia Sound & Light Technology
@@ -848,8 +907,20 @@ export default function App() {
               )}
             </button>
 
+            {/* PWA Install Button */}
+            <button
+              id="header-shortcut-install-btn"
+              onClick={triggerPwaInstall}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-extrabold shadow-md hover:shadow-blue-500/10 active:scale-[0.98] transition-all border border-blue-400/25 h-9 shrink-0 animate-pulse duration-1000"
+              title="Telefonuna Kısayol Oluştur (Uygulama Olarak Yükle)"
+            >
+              <Smartphone className="w-3.5 h-3.5 text-white" />
+              <span className="hidden md:inline">Kısayol Oluştur</span>
+              <span className="md:hidden inline">Yükle</span>
+            </button>
+
             {/* DB Mode indicator */}
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[10px] font-mono leading-none">
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[10px] font-mono leading-none">
               {dbMode === 'cloud' ? (
                 <>
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -1337,6 +1408,72 @@ export default function App() {
               // Hatırlatıcılar Firestore bulutunda akıllı senkronizedir.
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* PWA CUSTOM SHORTCUT GUIDE OVERLAY */}
+      {showPwaGuide && (
+        <div id="pwa-guide-modal" className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 relative shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200 text-left">
+            <button
+              onClick={() => setShowPwaGuide(false)}
+              className="absolute right-4 top-4 p-1.5 bg-slate-900 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors border border-slate-800"
+              title="Kapat"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center gap-2.5 text-blue-400">
+              <div className="w-9 h-9 bg-blue-500/10 rounded-xl flex items-center justify-center border border-blue-500/20">
+                <Smartphone className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-sm text-white">Ana Ekrana Kısayol Ekle</h3>
+                <p className="text-[10px] text-slate-500 font-mono font-bold">ASIA SOUND & LIGHT UYGULAMASI</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed font-sans">
+              Uygulamayı telefonunuzun ana ekranına ekleyerek tıpkı bir mobil uygulama gibi kullanabilirsiniz. Aşağıdaki talimatları takip edebilirsiniz:
+            </p>
+
+            <div className="space-y-3.5 pt-1">
+              
+              {/* iPhone / iOS Guide */}
+              <div className="p-4 bg-slate-950/50 border border-slate-800 rounded-2xl space-y-2.5">
+                <div className="flex items-center gap-2 text-amber-400 text-xs font-bold font-mono uppercase tracking-wide">
+                  <span className="w-2 h-2 rounded-full bg-amber-500" />
+                  iPhone & iPad (iOS Safari)
+                </div>
+                <ol className="text-[11px] text-slate-400 space-y-1.5 list-decimal pl-4 leading-relaxed font-medium">
+                  <li>Safari alt çubuğundaki <span className="bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded font-bold font-mono">Paylaş ( <Share2 className="w-3 h-3 inline-block text-blue-400" /> )</span> simgesine basın.</li>
+                  <li>Yukarı kaydırarak <strong className="text-slate-200 font-extrabold">"Ana Ekrana Ekle"</strong> (Add to Home Screen) simgesine dokunun.</li>
+                  <li>Açılan pencerede sağ üstteki <strong className="text-slate-200 font-extrabold">"Ekle"</strong> butonuna dokunun.</li>
+                </ol>
+              </div>
+
+              {/* Android / Chrome Guide */}
+              <div className="p-4 bg-slate-950/50 border border-slate-800 rounded-2xl space-y-2.5">
+                <div className="flex items-center gap-2 text-blue-400 text-xs font-bold font-mono uppercase tracking-wide">
+                  <span className="w-2 h-2 rounded-full bg-blue-500" />
+                  Android (Google Chrome)
+                </div>
+                <ol className="text-[11px] text-slate-400 space-y-1.5 list-decimal pl-4 leading-relaxed font-medium">
+                  <li>Tarayıcı sağ üst köşesindeki <strong className="text-slate-200 font-mono">üç nokta (⋮)</strong> menüsüne dokunun.</li>
+                  <li>Listeden <strong className="text-slate-200 font-extrabold">"Uygulamayı Yükle"</strong> veya <strong className="text-slate-200 font-extrabold">"Ana Ekrana Ekle"</strong> seçeneğini seçin.</li>
+                  <li>Onay penceresinde <strong className="text-slate-205 font-extrabold">"Ekle"</strong> veya <strong className="text-slate-205 font-extrabold">"Yükle"</strong> butonuna basarak kısayolu oluşturun.</li>
+                </ol>
+              </div>
+
+            </div>
+
+            <button
+              onClick={() => setShowPwaGuide(false)}
+              className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-xs uppercase tracking-wider shadow-lg shadow-blue-500/10 transition-colors"
+            >
+              Anladım, Kapat
+            </button>
           </div>
         </div>
       )}
