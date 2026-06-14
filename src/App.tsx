@@ -114,10 +114,15 @@ export default function App() {
         // Subscribe to events
         unsubEvents = onSnapshot(collection(db, 'events'), (snapshot) => {
           if (snapshot.empty) {
-            // Seed INITIAL_EVENTS if free-tier cloud is fully blank
-            INITIAL_EVENTS.forEach(async (ev) => {
-              await setDoc(doc(db, 'events', ev.id), ev);
-            });
+            if (INITIAL_EVENTS.length > 0) {
+              // Seed INITIAL_EVENTS if free-tier cloud is fully blank
+              INITIAL_EVENTS.forEach(async (ev) => {
+                await setDoc(doc(db, 'events', ev.id), ev);
+              });
+            } else {
+              setEvents([]);
+              localStorage.setItem('rf_events_data', JSON.stringify([]));
+            }
           } else {
             const list: EventJob[] = [];
             snapshot.forEach((snap) => {
@@ -136,10 +141,15 @@ export default function App() {
         // Subscribe to technical staff
         unsubStaff = onSnapshot(collection(db, 'staff'), (snapshot) => {
           if (snapshot.empty) {
-            // Seed INITIAL_STAFF if Firestore holds no personnel records
-            INITIAL_STAFF.forEach(async (st) => {
-              await setDoc(doc(db, 'staff', st.id), st);
-            });
+            if (INITIAL_STAFF.length > 0) {
+              // Seed INITIAL_STAFF if Firestore holds no personnel records
+              INITIAL_STAFF.forEach(async (st) => {
+                await setDoc(doc(db, 'staff', st.id), st);
+              });
+            } else {
+              setStaffList([]);
+              localStorage.setItem('rf_staff_data', JSON.stringify([]));
+            }
           } else {
             const list: Staff[] = [];
             snapshot.forEach((snap) => {
@@ -156,10 +166,15 @@ export default function App() {
         // Subscribe to operation expenses
         unsubExpenses = onSnapshot(collection(db, 'expenses'), (snapshot) => {
           if (snapshot.empty) {
-            // Seed INITIAL_EXPENSES on clean DB
-            INITIAL_EXPENSES.forEach(async (ex) => {
-              await setDoc(doc(db, 'expenses', ex.id), ex);
-            });
+            if (INITIAL_EXPENSES.length > 0) {
+              // Seed INITIAL_EXPENSES on clean DB
+              INITIAL_EXPENSES.forEach(async (ex) => {
+                await setDoc(doc(db, 'expenses', ex.id), ex);
+              });
+            } else {
+              setExpenses([]);
+              localStorage.setItem('rf_expenses_data', JSON.stringify([]));
+            }
           } else {
             const list: Expense[] = [];
             snapshot.forEach((snap) => {
@@ -176,10 +191,15 @@ export default function App() {
         // Subscribe to event reminders
         unsubReminders = onSnapshot(collection(db, 'reminders'), (snapshot) => {
           if (snapshot.empty) {
-            // Seed INITIAL_REMINDERS on first boot
-            INITIAL_REMINDERS.forEach(async (rem) => {
-              await setDoc(doc(db, 'reminders', rem.id), rem);
-            });
+            if (INITIAL_REMINDERS.length > 0) {
+              // Seed INITIAL_REMINDERS on first boot
+              INITIAL_REMINDERS.forEach(async (rem) => {
+                await setDoc(doc(db, 'reminders', rem.id), rem);
+              });
+            } else {
+              setReminders([]);
+              localStorage.setItem('rf_reminders_data', JSON.stringify([]));
+            }
           } else {
             const list: Reminder[] = [];
             snapshot.forEach((snap) => {
@@ -383,58 +403,7 @@ export default function App() {
     }
   };
 
-  // --- MASTER CLEANUP / ALL DATA PURGE ACTION ---
-  const handleClearAllData = async () => {
-    if (!window.confirm("DİKKAT! Tüm etkinlikleri, personel kadrosunu, harcamaları ve hatırlatıcıları silmek istediğinizden emin misiniz? Bu işlem bulut ve yerel veritabanındaki TÜM kayıtları silecektir ve geri alınamaz.")) {
-      return;
-    }
 
-    // Capture frozen copies of active entities
-    const currentEvents = [...events];
-    const currentStaff = [...staffList];
-    const currentExpenses = [...expenses];
-    const currentReminders = [...reminders];
-
-    // Clear UI state immediately (optimistic UI)
-    setEvents([]);
-    setStaffList([]);
-    setExpenses([]);
-    setReminders([]);
-
-    // Purge Local Storage
-    localStorage.removeItem('rf_events_data');
-    localStorage.removeItem('rf_expenses_data');
-    localStorage.removeItem('rf_staff_data');
-    localStorage.removeItem('rf_reminders_data');
-
-    // Purge Cloud Database if connected
-    if (dbMode === 'cloud') {
-      try {
-        const deletePromises: Promise<void>[] = [];
-
-        currentEvents.forEach((ev) => {
-          deletePromises.push(deleteDoc(doc(db, 'events', ev.id)));
-        });
-        currentStaff.forEach((st) => {
-          deletePromises.push(deleteDoc(doc(db, 'staff', st.id)));
-        });
-        currentExpenses.forEach((ex) => {
-          deletePromises.push(deleteDoc(doc(db, 'expenses', ex.id)));
-        });
-        currentReminders.forEach((rem) => {
-          deletePromises.push(deleteDoc(doc(db, 'reminders', rem.id)));
-        });
-
-        await Promise.all(deletePromises);
-        alert("Tüm bulut ve yerel veritabanı kayıtları başarıyla sıfırlandı!");
-      } catch (err: any) {
-        console.warn("Could not completely purge Firestore documents:", err);
-        alert(`Yerel veriler temizlendi fakat bazı bulut kayıtları silinirken hata oluştu: ${err.message}`);
-      }
-    } else {
-      alert("Tüm yerel veritabanı kayıtları başarıyla temizlendi!");
-    }
-  };
 
 
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -602,15 +571,7 @@ export default function App() {
           {/* Quick status bar indicator with Google sign-in */}
           <div className="flex items-center gap-3">
             
-            {/* Clear All Data Reset Button */}
-            <button
-              onClick={handleClearAllData}
-              className="p-1 px-2.5 text-[10px] uppercase font-bold text-rose-450 hover:text-white bg-rose-950/20 hover:bg-rose-600 border border-rose-900/40 hover:border-rose-500 rounded-xl transition-all flex items-center gap-1.5 h-9"
-              title="Tüm Veritabanı ve Yerel Verileri Tamamen Temizle"
-            >
-              <Trash className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Verileri Sıfırla</span>
-            </button>
+
 
             {/* Notification Bell Badge */}
             <button
