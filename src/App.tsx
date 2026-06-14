@@ -47,6 +47,7 @@ import {
   collection, 
   onSnapshot, 
   doc, 
+  getDoc,
   setDoc, 
   deleteDoc 
 } from 'firebase/firestore';
@@ -88,6 +89,140 @@ export default function App() {
   const [dbMode, setDbMode] = useState<'cloud' | 'local'>('local');
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [authChecking, setAuthChecking] = useState(true);
+
+  // --- CUSTOM AUTHENTICATION & ACCESS CONTROL ENGINES ---
+  const [customUser, setCustomUser] = useState<{name: string; code: string; role: 'patron' | 'calisan'} | null>(() => 
+    getStoredData('asl_custom_user', null)
+  );
+  const [loginName, setLoginName] = useState('');
+  const [loginCode, setLoginCode] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [generatingCode, setGeneratingCode] = useState(false);
+  const [generatedCodeInfo, setGeneratedCodeInfo] = useState<{name: string, code: string} | null>(null);
+
+  const handleGetCode = async () => {
+    setLoginError('');
+    setGeneratedCodeInfo(null);
+    if (!loginName.trim()) {
+      setLoginError("Lütfen kullanıcı kodu almadan önce Ad ve Soyadınızı giriniz.");
+      return;
+    }
+
+    setGeneratingCode(true);
+    const fullName = loginName.trim();
+    // Simple translit to normalize characters
+    const norm = fullName.toLowerCase()
+      .replace(/ı/g, 'i')
+      .replace(/ğ/g, 'g')
+      .replace(/ü/g, 'u')
+      .replace(/ş/g, 's')
+      .replace(/ö/g, 'o')
+      .replace(/ç/g, 'c');
+
+    let code = '';
+    let role: 'patron' | 'calisan' = 'calisan';
+
+    // Patron override check
+    if (norm.includes('ozan') && norm.includes('ozcan')) {
+      code = '1903';
+      role = 'patron';
+    } else if (norm.includes('mustafa') && norm.includes('cihan')) {
+      code = '1923';
+      role = 'patron';
+    } else {
+      // General staff code handling
+      try {
+        const docRef = doc(db, 'user_codes', norm);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          code = data.code;
+          role = data.role || 'calisan';
+        } else {
+          // Generate pseudo random 6-digit number
+          const rand = Math.floor(100000 + Math.random() * 900000);
+          code = String(rand);
+          role = 'calisan';
+          // Save in Firestore for multi-device sync
+          await setDoc(docRef, {
+            name: fullName,
+            code,
+            role,
+            createdAt: new Date().toISOString()
+          });
+        }
+      } catch (e) {
+        console.warn("Firestore error getting code, using local cached registries:", e);
+        const localRegistry = getStoredData<Record<string, {name: string, code: string, role: string}>>('asl_local_codes_registry', {});
+        if (localRegistry[norm]) {
+          code = localRegistry[norm].code;
+          role = localRegistry[norm].role as 'patron' | 'calisan';
+        } else {
+          const rand = Math.floor(100000 + Math.random() * 900000);
+          code = String(rand);
+          role = 'calisan';
+          localRegistry[norm] = { name: fullName, code, role };
+          localStorage.setItem('asl_local_codes_registry', JSON.stringify(localRegistry));
+        }
+      }
+    }
+
+    setGeneratingCode(false);
+    setLoginCode(code);
+    setGeneratedCodeInfo({ name: fullName, code });
+  };
+
+  const handleCustomLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError('');
+    if (!loginName.trim() || !loginCode.trim()) {
+      setLoginError("Lütfen Ad Soyad ve Kullanıcı Kodu alanlarını doldurunuz.");
+      return;
+    }
+
+    const nameVal = loginName.trim();
+    const codeVal = loginCode.trim();
+
+    const norm = nameVal.toLowerCase()
+      .replace(/ı/g, 'i')
+      .replace(/ğ/g, 'g')
+      .replace(/ü/g, 'u')
+      .replace(/ş/g, 's')
+      .replace(/ö/g, 'o')
+      .replace(/ç/g, 'c');
+
+    let role: 'patron' | 'calisan' = 'calisan';
+
+    if (codeVal === '1903' || codeVal === '1923') {
+      role = 'patron';
+    } else {
+      role = 'calisan';
+    }
+
+    if (norm.includes('ozan') && norm.includes('ozcan') && codeVal === '1903') {
+      role = 'patron';
+    } else if (norm.includes('mustafa') && norm.includes('cihan') && codeVal === '1923') {
+      role = 'patron';
+    }
+
+    const userData = {
+      name: nameVal,
+      code: codeVal,
+      role
+    };
+
+    setCustomUser(userData);
+    localStorage.setItem('asl_custom_user', JSON.stringify(userData));
+    setGeneratedCodeInfo(null);
+  };
+
+  const handleCustomLogout = () => {
+    setCustomUser(null);
+    localStorage.removeItem('asl_custom_user');
+    setLoginName('');
+    setLoginCode('');
+    setLoginError('');
+  };
 
   // Active View Tab Control
   const [activeTab, setActiveTab] = useState<'calendar' | 'expenses' | 'inventory'>('calendar');
@@ -561,6 +696,110 @@ export default function App() {
     };
   }, [events, expenses]);
 
+  if (!customUser) {
+    return (
+      <div id="login-container" className="min-h-screen bg-[#020617] text-slate-100 font-sans flex flex-col items-center justify-center p-4 relative overflow-hidden">
+        {/* Decorative ambient background spheres */}
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-600/10 blur-[130px] rounded-full pointer-events-none" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-indigo-600/10 blur-[130px] rounded-full pointer-events-none" />
+        
+        <div className="w-full max-w-md bg-slate-900/60 backdrop-blur-xl border border-slate-800 rounded-3xl p-8 relative shadow-2xl z-10 flex flex-col space-y-6">
+          {/* Brand header */}
+          <div className="text-center space-y-3">
+            <div className="w-16 h-16 rounded-full bg-slate-950 border border-slate-800 flex items-center justify-center text-blue-500 mx-auto relative shadow-lg shadow-blue-500/10 group overflow-hidden">
+              <div className="absolute inset-1 rounded-full border border-dashed border-slate-800/80 animate-spin" style={{ animationDuration: '6s' }}></div>
+              <Volume2 className="w-7 h-7 text-blue-400 relative z-0" />
+            </div>
+            <div>
+              <h1 className="text-xl font-black uppercase tracking-tight text-white">
+                Asia Sound & Light <span className="text-blue-500">Technology</span>
+              </h1>
+              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-mono font-bold mt-1">Sistem & Hizmet Defteri Giriş</p>
+            </div>
+          </div>
+
+          {/* Login Form */}
+          <form onSubmit={handleCustomLogin} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold font-mono uppercase tracking-wider text-slate-400">Ad Soyad</label>
+              <input
+                type="text"
+                placeholder="Örn: Ozan Özcan"
+                value={loginName}
+                onChange={(e) => setLoginName(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 focus:border-blue-500 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-600 outline-none transition-all font-medium"
+                required
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold font-mono uppercase tracking-wider text-slate-400">Kullanıcı Kodu</label>
+              <input
+                type="text"
+                placeholder="Kodunuzu giriniz veya alınız"
+                value={loginCode}
+                onChange={(e) => setLoginCode(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 focus:border-blue-500 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-600 outline-none transition-all font-mono font-bold"
+              />
+            </div>
+
+            {loginError && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-450 text-xs flex items-center gap-2 font-medium">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{loginError}</span>
+              </div>
+            )}
+
+            {generatedCodeInfo && (
+              <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs space-y-1">
+                <div className="flex items-center gap-2 font-bold uppercase tracking-wider text-[10px] font-mono text-emerald-300">
+                  <CheckCircle className="w-4 h-4 text-emerald-450 shrink-0" />
+                  Kullanıcı Kodu Atandı!
+                </div>
+                <p className="mt-1">Sayın <strong className="text-white">{generatedCodeInfo.name}</strong>, sizin için özel belirlenen giriş kodunuz:</p>
+                <div className="mt-2 text-center text-lg font-black font-mono tracking-widest text-emerald-300 bg-emerald-950/40 p-2 rounded-lg border border-emerald-900/30">
+                  {generatedCodeInfo.code}
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1.5 italic font-medium">// Kodunuz sisteme kaydedildi. Lütfen bu kodu unutmayınız.</p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <button
+                type="button"
+                disabled={generatingCode}
+                onClick={handleGetCode}
+                className="w-full py-3 px-4 bg-slate-950 hover:bg-slate-850/80 text-blue-400 hover:text-blue-300 rounded-xl font-bold text-xs uppercase tracking-wider border border-blue-500/30 hover:border-blue-500/50 transition-all flex items-center justify-center gap-1.5"
+              >
+                {generatingCode ? (
+                  <span className="w-4 h-4 border-2 border-blue-400/30 border-t-blue-400 rounded-full animate-spin"></span>
+                ) : (
+                  <>
+                    <Database className="w-3.5 h-3.5" />
+                    Kod Al
+                  </>
+                )}
+              </button>
+              
+              <button
+                type="submit"
+                className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-xs uppercase tracking-wider shadow-lg shadow-blue-500/15 hover:scale-[1.01] active:scale-95 transition-all flex items-center justify-center gap-1.5"
+              >
+                <UserCheck className="w-3.5 h-3.5" />
+                Giriş Yap
+              </button>
+            </div>
+          </form>
+
+          {/* Slogan */}
+          <p className="text-[10px] text-slate-500 text-center font-mono font-medium pt-3 border-t border-slate-800/50">
+            &copy; 2026 Asia Sound & Light Technology
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div id="applet-viewport" className="min-h-screen bg-[#020617] text-slate-100 font-sans flex flex-col">
       
@@ -624,37 +863,23 @@ export default function App() {
               )}
             </div>
 
-            {/* Google Authentication Section */}
-            {authChecking ? (
-              <div className="w-5 h-5 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
-            ) : currentUser ? (
-              <div className="flex items-center gap-1.5 bg-slate-900/80 border border-slate-800 p-1 rounded-xl">
-                {currentUser.photoURL ? (
-                  <img src={currentUser.photoURL} alt={currentUser.displayName} className="w-6 h-6 rounded-full ring-1 ring-blue-500/50" referrerPolicy="no-referrer" />
-                ) : (
-                  <div className="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center text-[9px] font-black text-white">
-                    {currentUser.email?.substring(0,2).toUpperCase()}
-                  </div>
-                )}
-                <div className="hidden sm:block text-left text-[9px] max-w-[90px] truncate leading-tight">
-                  <p className="font-bold text-slate-200 truncate">{currentUser.displayName || 'Yetkili'}</p>
+            {/* Custom User Authentication Section */}
+            {customUser && (
+              <div className="flex items-center gap-2 bg-slate-900/80 border border-slate-800 p-1 pl-3 rounded-xl max-h-[38px]">
+                <div className="flex flex-col text-left leading-none">
+                  <span className="font-extrabold text-xs text-white truncate max-w-[120px]">{customUser.name}</span>
+                  <span className={`font-mono text-[9px] font-bold mt-0.5 ${customUser.role === 'patron' ? 'text-amber-400' : 'text-blue-400'}`}>
+                    {customUser.role === 'patron' ? 'PATRON' : 'EKİP'} ({customUser.code})
+                  </span>
                 </div>
                 <button 
-                  onClick={logoutUser}
+                  onClick={handleCustomLogout}
                   title="Güvenli Çıkış"
-                  className="p-1 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-rose-450 transition-colors"
+                  className="p-1 px-2.5 bg-slate-950/40 hover:bg-rose-950/20 text-slate-400 hover:text-rose-400 rounded-lg transition-colors flex items-center justify-center border border-slate-800/80 hover:border-rose-950/50 h-7"
                 >
-                  <LogOut className="w-3 h-3" />
+                  <LogOut className="w-3.5 h-3.5" />
                 </button>
               </div>
-            ) : (
-              <button
-                onClick={loginWithGoogle}
-                className="px-2.5 py-1.5 text-[11px] font-bold bg-blue-600 hover:bg-blue-500 text-white rounded-lg shadow-md transition-all flex items-center gap-1"
-                title="Google hesabı ile buluta yedekleyin"
-              >
-                <UserCheck className="w-3 h-3" /> Giriş
-              </button>
             )}
 
             <div className="hidden lg:flex flex-col text-right border-l border-slate-800 pl-3">
@@ -670,108 +895,128 @@ export default function App() {
       <main id="main-content" className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         
         {/* TOP LEVEL OVERALL COMPANY FINANCE & OPERATION STATUS SUMMARY GRIDS */}
-        <div id="company-summary-grid" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          
-          {/* Stat 1: Total Revenue (Budget) */}
-          <div id="metric-revenue" className="bg-slate-900/40 backdrop-blur-md rounded-3xl p-5 border border-slate-800 hover:border-slate-700 transition-all flex items-center justify-between group shadow-xl">
-            <div className="space-y-1">
-              <span className="text-slate-400 text-xs font-bold uppercase tracking-wider block">Toplam Ciro / Bütçe</span>
-              <h4 className="text-2xl font-black text-white group-hover:text-blue-400 transition-colors">{companyStats.totalIncome.toLocaleString('tr-TR')} ₺</h4>
-              <span className="text-[10px] text-slate-500 block">Planlanmış işlerden beklenen gelir</span>
+        {customUser.role === 'patron' ? (
+          <div id="company-summary-grid" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            
+            {/* Stat 1: Total Revenue (Budget) */}
+            <div id="metric-revenue" className="bg-slate-900/40 backdrop-blur-md rounded-3xl p-5 border border-slate-800 hover:border-slate-700 transition-all flex items-center justify-between group shadow-xl">
+              <div className="space-y-1">
+                <span className="text-slate-400 text-xs font-bold uppercase tracking-wider block">Toplam Ciro / Bütçe</span>
+                <h4 className="text-2xl font-black text-white group-hover:text-blue-400 transition-colors">{companyStats.totalIncome.toLocaleString('tr-TR')} ₺</h4>
+                <span className="text-[10px] text-slate-500 block">Planlanmış işlerden beklenen gelir</span>
+              </div>
+              <div className="w-12 h-12 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-2xl flex items-center justify-center shadow-inner">
+                <TrendingUp className="w-5 h-5" />
+              </div>
             </div>
-            <div className="w-12 h-12 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-2xl flex items-center justify-center shadow-inner">
-              <TrendingUp className="w-5 h-5" />
+
+            {/* Stat 2: Total Spent (Expenses) */}
+            <div id="metric-expenses" className="bg-slate-900/40 backdrop-blur-md rounded-3xl p-5 border border-slate-800 hover:border-slate-700 transition-all flex items-center justify-between group shadow-xl">
+              <div className="space-y-1">
+                <span className="text-slate-400 text-xs font-bold uppercase tracking-wider block">Toplam Operasyon Gideri</span>
+                <h4 className="text-2xl font-black text-rose-500">{companyStats.totalExpenses.toLocaleString('tr-TR')} ₺</h4>
+                <span className="text-[10px] text-slate-500 block">Personel, ulaşım ve malzeme harcamaları</span>
+              </div>
+              <div className="w-12 h-12 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-2xl flex items-center justify-center">
+                <DollarSign className="w-5 h-5" />
+              </div>
+            </div>
+
+            {/* Stat 3: Net Cash Position */}
+            <div id="metric-profit" className="bg-slate-900/40 backdrop-blur-md rounded-3xl p-5 border border-slate-800 hover:border-slate-700 transition-all flex items-center justify-between group shadow-xl">
+              <div className="space-y-1">
+                <span className="text-slate-400 text-xs font-bold uppercase tracking-wider block">Öngörülen Net Kar</span>
+                <h4 className={`text-2xl font-black ${companyStats.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-500'}`}>
+                  {companyStats.netProfit.toLocaleString('tr-TR')} ₺
+                </h4>
+                <span className="text-[10px] text-slate-500 block font-semibold">
+                  Kar Oranı: <span className="text-emerald-400 font-bold">{companyStats.profitMarginPct.toFixed(1)}%</span>
+                </span>
+              </div>
+              <div className="w-12 h-12 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-2xl flex items-center justify-center">
+                <CheckCircle className="w-5 h-5" />
+              </div>
+            </div>
+
+            {/* Stat 4: Active Work List */}
+            <div id="metric-active-jobs" className="bg-slate-900/40 backdrop-blur-md rounded-3xl p-5 border border-slate-800 hover:border-slate-700 transition-all flex items-center justify-between group shadow-xl">
+              <div className="space-y-1">
+                <span className="text-slate-400 text-xs font-bold uppercase tracking-wider block">Gelecek Aktif İşler</span>
+                <h4 className="text-2xl font-black text-indigo-400">{companyStats.activeJobsCount} Etkinlik</h4>
+                <span className="text-[10px] text-slate-500 block">Hazırlık veya planlama aşamasında</span>
+              </div>
+              <div className="w-12 h-12 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-2xl flex items-center justify-center">
+                <Activity className="w-5 h-5" />
+              </div>
+            </div>
+
+          </div>
+        ) : (
+          /* SIMPLE GREETING BANNERS FOR EMPLOYEES */
+          <div id="crew-greeting-banner" className="bg-slate-900/40 border border-slate-850 backdrop-blur-md rounded-3xl p-5 sm:p-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
+            <div className="flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left">
+              <div className="w-12 h-12 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-2.5xl flex items-center justify-center shadow-lg">
+                <Volume2 className="w-5 h-5 text-blue-400" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-extrabold text-white">Hoş geldiniz, {customUser.name}!</h3>
+                <p className="text-xs text-slate-400 font-mono tracking-tight">// Asia Sound & Light Saha Ekip Üyesi - Sadece takvim, saat ve malzeme detaylarına yetkilisiniz.</p>
+              </div>
+            </div>
+            <div className="px-4 py-2 bg-blue-950/40 border border-blue-900/30 rounded-2xl text-[10px] font-mono font-bold text-blue-400 uppercase tracking-widest shrink-0 text-center">
+              Mevcut Yetki: Çalışma Takvimi
             </div>
           </div>
-
-          {/* Stat 2: Total Spent (Expenses) */}
-          <div id="metric-expenses" className="bg-slate-900/40 backdrop-blur-md rounded-3xl p-5 border border-slate-800 hover:border-slate-700 transition-all flex items-center justify-between group shadow-xl">
-            <div className="space-y-1">
-              <span className="text-slate-400 text-xs font-bold uppercase tracking-wider block">Toplam Operasyon Gideri</span>
-              <h4 className="text-2xl font-black text-rose-500">{companyStats.totalExpenses.toLocaleString('tr-TR')} ₺</h4>
-              <span className="text-[10px] text-slate-500 block">Personel, ulaşım ve malzeme harcamaları</span>
-            </div>
-            <div className="w-12 h-12 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-2xl flex items-center justify-center">
-              <DollarSign className="w-5 h-5" />
-            </div>
-          </div>
-
-          {/* Stat 3: Net Cash Position */}
-          <div id="metric-profit" className="bg-slate-900/40 backdrop-blur-md rounded-3xl p-5 border border-slate-800 hover:border-slate-700 transition-all flex items-center justify-between group shadow-xl">
-            <div className="space-y-1">
-              <span className="text-slate-400 text-xs font-bold uppercase tracking-wider block">Öngörülen Net Kar</span>
-              <h4 className={`text-2xl font-black ${companyStats.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-500'}`}>
-                {companyStats.netProfit.toLocaleString('tr-TR')} ₺
-              </h4>
-              <span className="text-[10px] text-slate-500 block font-semibold">
-                Kar Oranı: <span className="text-emerald-400 font-bold">{companyStats.profitMarginPct.toFixed(1)}%</span>
-              </span>
-            </div>
-            <div className="w-12 h-12 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-2xl flex items-center justify-center">
-              <CheckCircle className="w-5 h-5" />
-            </div>
-          </div>
-
-          {/* Stat 4: Active Work List */}
-          <div id="metric-active-jobs" className="bg-slate-900/40 backdrop-blur-md rounded-3xl p-5 border border-slate-800 hover:border-slate-700 transition-all flex items-center justify-between group shadow-xl">
-            <div className="space-y-1">
-              <span className="text-slate-400 text-xs font-bold uppercase tracking-wider block">Gelecek Aktif İşler</span>
-              <h4 className="text-2xl font-black text-indigo-400">{companyStats.activeJobsCount} Etkinlik</h4>
-              <span className="text-[10px] text-slate-500 block">Hazırlık veya planlama aşamasında</span>
-            </div>
-            <div className="w-12 h-12 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-2xl flex items-center justify-center">
-              <Activity className="w-5 h-5" />
-            </div>
-          </div>
-
-        </div>
+        )}
 
         {/* NAVIGATION VIEWS CONTROLLER TABS */}
-        <div id="dashboard-views-nav" className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 border-b border-slate-800 pb-3">
-          
-          {/* Tabs */}
-          <div className="flex bg-slate-900/80 p-1 rounded-2xl border border-slate-800 shadow-xl self-start">
-            <button
-              id="navigation-tab-calendar"
-              onClick={() => setActiveTab('calendar')}
-              className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
-                activeTab === 'calendar' 
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/10' 
-                  : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/50'
-              }`}
-            >
-              <CalendarIcon className="w-4 h-4" /> Hizmet & Kiralama Takvimi
-            </button>
-            <button
-              id="navigation-tab-expenses"
-              onClick={() => setActiveTab('expenses')}
-              className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
-                activeTab === 'expenses' 
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/10' 
-                  : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/50'
-              }`}
-            >
-              <CreditCard className="w-4 h-4" /> Harcamalar & Gider Takibi
-            </button>
-            <button
-              id="navigation-tab-inventory"
-              onClick={() => setActiveTab('inventory')}
-              className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
-                activeTab === 'inventory' 
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/10' 
-                  : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/50'
-              }`}
-            >
-              <Users className="w-4 h-4" /> Saha Ekip Yönetimi
-            </button>
-          </div>
+        {customUser.role === 'patron' && (
+          <div id="dashboard-views-nav" className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 border-b border-slate-800 pb-3">
+            
+            {/* Tabs */}
+            <div className="flex bg-slate-900/80 p-1 rounded-2xl border border-slate-800 shadow-xl self-start">
+              <button
+                id="navigation-tab-calendar"
+                onClick={() => setActiveTab('calendar')}
+                className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                  activeTab === 'calendar' 
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/10' 
+                    : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/50'
+                }`}
+              >
+                <CalendarIcon className="w-4 h-4" /> Hizmet & Kiralama Takvimi
+              </button>
+              <button
+                id="navigation-tab-expenses"
+                onClick={() => setActiveTab('expenses')}
+                className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                  activeTab === 'expenses' 
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/10' 
+                    : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/50'
+                }`}
+              >
+                <CreditCard className="w-4 h-4" /> Harcamalar & Gider Takibi
+              </button>
+              <button
+                id="navigation-tab-inventory"
+                onClick={() => setActiveTab('inventory')}
+                className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                  activeTab === 'inventory' 
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/10' 
+                    : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/50'
+                }`}
+              >
+                <Users className="w-4 h-4" /> Saha Ekip Yönetimi
+              </button>
+            </div>
 
-          <p id="active-tab-desc" className="text-xs text-slate-400 font-mono font-medium">
-            {activeTab === 'calendar' && '// Takvim günlerine tıklayarak o güne atanan ekip ve malzemeleri görebilirsiniz.'}
-            {activeTab === 'expenses' && '// Personel masrafları ve teknik giderleri kategori bazlı yönetip denetleyebilirsiniz.'}
-            {activeTab === 'inventory' && '// Saha görevli personellerini, DJ kadrosunu ve çalışma takvimlerini yönetebilirsiniz.'}
-          </p>
-        </div>
+            <p id="active-tab-desc" className="text-xs text-slate-400 font-mono font-medium">
+              {activeTab === 'calendar' && '// Takvim günlerine tıklayarak o güne atanan ekip ve malzemeleri görebilirsiniz.'}
+              {activeTab === 'expenses' && '// Personel masrafları ve teknik giderleri kategori bazlı yönetip denetleyebilirsiniz.'}
+              {activeTab === 'inventory' && '// Saha görevli personellerini, DJ kadrosunu ve çalışma takvimlerini yönetebilirsiniz.'}
+            </p>
+          </div>
+        )}
 
         {/* CONTAINER SWITCH - DYNAMIC RENDER OF THE CHOSEN SUBVIEW */}
         <div id="active-view-canvas" className="transition-all duration-300">
@@ -787,6 +1032,7 @@ export default function App() {
               onAddReminder={handleAddReminder}
               onToggleReminder={handleToggleReminder}
               onDeleteReminder={handleDeleteReminder}
+              userRole={customUser?.role}
             />
           )}
 
